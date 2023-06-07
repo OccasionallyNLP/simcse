@@ -1,0 +1,1 @@
+python train.py --distributed False --test_name test --output_dir ../output/simcse --train_data ./nli.jsonl --val_data ./sts_dev.jsonl --epochs 1 --batch_size 8 --warmup 100 --fp16 False --accumulation_steps 1 --ptm_path ../plm/keti-t5-small --max_length 512 --early_stop True --patience 3

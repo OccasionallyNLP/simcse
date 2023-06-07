@@ -35,7 +35,7 @@ def get_args():
    
     # 학습 관련
     parser.add_argument('--epochs', default = 10, type=int)
-    parser.add_argument('--eval_epoch', type = int, default = 1, help = 'term of evaluation')
+    parser.add_argument('--eval_step', type = int)
     parser.add_argument('--batch_size', default = 8, type=int)
     parser.add_argument('--lr', type=float, default = 5e-5)
     parser.add_argument('--warmup', type=float, default = 1000)
@@ -121,34 +121,29 @@ def train():
                     logger2.info(iter_bar)
             global_step+=1
             
-        # epoch 당 기록.
-        if args.local_rank in [-1,0]:
-            logger1.info(iter_bar)
-            logger2.info(iter_bar)
-        ########################################################################################
-        # evaluation
-        ###################################################################################################
-        if args.eval_epoch!=0 and epoch%args.eval_epoch==0:
-            # validation
-            val_scores_, _ = evaluation(model, val_dataloader)
-            val_scores = get_scores(args.local_rank, val_scores_, args.distributed)            
-            if args.local_rank in [-1,0]:
-                logger1.info(f'Val ---- epoch : {epoch} ----- scores:{val_scores}')
-                logger2.info(f'Val ---- epoch : {epoch} ----- scores:{val_scores}')
-                model_to_save = model.module if hasattr(model,'module') else model
-                early_stop.check(model_to_save, val_scores['corr'])  
-                if early_stop.timetobreak:
-                    flag_tensor += 1
-            if args.distributed:
-                torch.distributed.broadcast(flag_tensor, 0) 
-                torch.distributed.barrier()
-        ###################################################################################################
-        if args.early_stop:    
-            if flag_tensor:
-                if args.local_rank in [-1,0]:
-                    logger1.info('early stop')
-                    logger2.info('early stop')
-                break
+            if args.eval_step is not None:
+                if global_step%args.eval_step==0:
+                    # validation
+                    val_scores_, _ = evaluation(model, val_dataloader)
+                    val_scores = get_scores(args.local_rank, val_scores_, args.distributed)            
+                    if args.local_rank in [-1,0]:
+                        logger1.info(f'Val ---- step : {step} ----- scores:{val_scores}')
+                        logger2.info(f'Val ---- step : {step} ----- scores:{val_scores}')
+                        model_to_save = model.module if hasattr(model,'module') else model
+                        early_stop.check(model_to_save, val_scores['corr'])  
+                        if early_stop.timetobreak:
+                            flag_tensor += 1
+                    if args.distributed:
+                        torch.distributed.broadcast(flag_tensor, 0) 
+                        torch.distributed.barrier()
+                ###################################################################################################
+                if args.early_stop:    
+                    if flag_tensor:
+                        if args.local_rank in [-1,0]:
+                            logger1.info('early stop')
+                            logger2.info('early stop')
+                        break
+                    
     # 저장시 - gpu 0번 것만 저장 - barrier 필수
     if args.local_rank in [-1,0]:
         torch.save(early_stop.best_model, os.path.join(early_stop.save_dir,'best_model'))
